@@ -1,132 +1,208 @@
 ﻿using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
 public class InGame : MonoBehaviour {
-    public GameObject audioSource;
-    public GameObject playingObject;
+    
+    public Player player = new Player();
+
     public GameObject btnPlay;
     public Sprite imgIdle;
     public Sprite imgRun;
 
-    public float deadZone = 0.05f;
-    public float radius = 1f;
-    public float objectSpeed = 2f;
-
     AudioSource m_AudioSrc;
-    Animator m_Anim;
+    Selectable m_ButtonPlay;
+    Image m_ImagePlay;
 
-    bool canRun = false;
-    bool isRunning = false;
-    bool onCir = false;
-    Vector3 dir;
-    
-    Vector3 defaultObjectPos;
-    Quaternion defaultObjectRot;
-
-    float posX, posZ, angle = 0f;
-    
+    Player.State m_CurState;
 
     void Start() {
-        defaultObjectPos = playingObject.transform.position;
-        defaultObjectRot = playingObject.transform.rotation;
-
-        m_AudioSrc = audioSource.GetComponent<AudioSource>();
-        m_Anim = playingObject.GetComponent<Animator>();
-
-        dir = playingObject.transform.forward;
+        m_AudioSrc = GetComponent<AudioSource>();
+        m_ButtonPlay = btnPlay.GetComponent<Selectable>();
+        m_ImagePlay = btnPlay.GetComponent<Image>();
     }
 
 
     void Update() {
-        if (isRunning) {
-            // Oh yeah! Optimization!
-            Vector3 objPos = playingObject.transform.position;
-            if (canRun) {
-                if (Vector3.Distance(objPos, defaultObjectPos) < radius && !onCir) {
-                    objPos += dir * Time.deltaTime / objectSpeed;
-                } else {
-                    onCir = true;
-                    // TODO
-                    // objPos += Quaternion.Euler(0, 90, 0) * (objPos - defaultObjectPos).normalized * Time.deltaTime / objectSpeed;
-                    posZ = defaultObjectPos.z + Mathf.Cos(angle) * radius;
-                    posX = defaultObjectPos.x + Mathf.Sin(angle) * radius;
-                    objPos = new Vector3(posX, 0f, posZ);
-                    angle = angle + Time.deltaTime / objectSpeed * 2.0f * radius;
-                    if (angle >= 2 * Mathf.PI)
-                        angle = 0f;
-                }
-                
-            } else if (isRunning) {
-                if (Vector3.Distance(objPos, defaultObjectPos) > deadZone) {
-                    objPos += (defaultObjectPos - objPos).normalized * Time.deltaTime / objectSpeed;
-                } else {
-                    btnPlay.GetComponent<Selectable>().interactable = true;
-                    m_Anim.SetBool("running", false);
-                    isRunning = false;
-                    dir = playingObject.transform.forward;
+        CheckStatus();
 
-                    float dd = Vector3.Angle(dir, Vector3.forward) * Mathf.Deg2Rad;
-                    dd = (dir.x < 0) ? Mathf.PI + (Mathf.PI - dd) : dd;
-                    angle = dd;
-                    onCir = false;
-                    return;
-                }
-            }
-            
-            if (isRunning) {
-                playingObject.transform.rotation = Quaternion.Lerp(
-                        playingObject.transform.rotation,
-                        Quaternion.LookRotation(objPos - playingObject.transform.position),
-                        5f * Time.deltaTime);
-                playingObject.transform.position = objPos;    
-            }
-            
+        if (player.getState() == Player.State.Idle && !m_ButtonPlay.interactable) {
+                m_ButtonPlay.interactable = true;
         }
+        player.Update();
+
     }
 
 
     void CheckStatus() {
-        if (canRun) {
-            btnPlay.GetComponent<Image>().sprite = imgIdle;
-            isRunning = true;
-            m_Anim.SetBool("running", true);
-            m_AudioSrc.Play();
+        if (m_CurState == player.getState()) {
+            return;
         } else {
-            btnPlay.GetComponent<Image>().sprite = imgRun;
-            if (isRunning) {
-                btnPlay.GetComponent<Selectable>().interactable = false;
+            m_CurState = player.getState();
+        }
+        switch (m_CurState) {
+            case Player.State.Idle:
+                m_ImagePlay.sprite = imgRun;
+                break;
+            case Player.State.Return:
+                m_ButtonPlay.interactable = false;
                 m_AudioSrc.Stop();
-            }
+                break;
+            case Player.State.Starting:
+                m_ImagePlay.sprite = imgIdle;
+                m_AudioSrc.Play();
+                break;
         }
     }
 
 
     public void ChangeState() {
-        canRun = !canRun;
-        CheckStatus();
+        if (player != null) {
+            player.ChangeState();
+        }
     }
 
 
     public void EnterGame() {
-        btnPlay.GetComponent<Selectable>().interactable = true;
-        m_Anim.enabled = true;
-        CheckStatus();
+        m_ButtonPlay.interactable = true;
+        //TODO
+        // Плохой вариант, но это скорее "затычка"
+        player.Init(Vector3.zero, 0f, gameObject.transform);
+        m_CurState = player.getState();
     }
 
 
     public void ExitGame() {
-        canRun = false;
-        isRunning = false;
-        onCir = false;
-        m_Anim.SetBool("running", false);
+        player.Free();
         m_AudioSrc.Stop();
-        playingObject.transform.position = defaultObjectPos;
-        playingObject.transform.rotation = defaultObjectRot;
-        dir = playingObject.transform.forward;
-        angle = 0f;
-        // ... Optimization?!
-        m_Anim.enabled = false;
     }
+
+
+    [System.Serializable]
+    public class Player {
+
+        public enum State {Idle, Starting, Return, Running};
+        State m_CurrentState = State.Idle;
+
+        public GameObject playingPrefab;
+
+        public float deadZone = 0.05f;
+        public float radius = 1f;
+        public float objectSpeed = 2f;
+        public float lookAtSpeed = 5f;
+
+        GameObject m_Object;
+        Animator m_Anim;
+        Vector3 m_Dir;
+        Vector3 m_DefaultObjectPos;
+        float m_Angle = 0f;
+
+
+        public void Init(Vector3 pos, float angle, Transform owner) {
+            if (m_Object == null) {
+                m_CurrentState = State.Idle;
+                m_Object = Instantiate(playingPrefab as GameObject);
+                m_Anim = m_Object.GetComponent<Animator>();
+                m_Dir = m_Object.transform.forward;
+                m_Angle = angle * Mathf.Deg2Rad;
+
+                m_DefaultObjectPos = pos;
+                m_Object.transform.position = m_DefaultObjectPos;
+                m_Object.transform.rotation = Quaternion.Euler(0, angle, 0);
+                m_Object.transform.parent = owner;
+            }
+        }
+
+        public void Free() {
+            if (m_Object != null) {
+                Destroy(m_Object);
+            }
+        }
+
+
+        public void Update() {
+            if (m_Object != null) {
+                // Oh yeah! Optimization!
+                Vector3 objPos = m_Object.transform.position;
+                switch (getState()) {
+                    case State.Starting:
+                        if (getTravel() < radius) {
+                            objPos += m_Dir * Time.deltaTime / objectSpeed;
+                            UpdatePosRot(objPos);
+                        } else {
+                            setState(State.Running);
+                        }
+                        break;
+                    case State.Running:
+                        objPos = new Vector3(Mathf.Sin(m_Angle), 0f, Mathf.Cos(m_Angle)) * radius;
+                        objPos += m_DefaultObjectPos;
+                        UpdatePosRot(objPos);
+
+                        m_Angle = m_Angle + Time.deltaTime / objectSpeed * 2.0f * radius;
+                        if (Mathf.Abs(m_Angle) >= 2 * Mathf.PI) {
+                            m_Angle = (Mathf.Abs(m_Angle) - 2 * Mathf.PI) * Mathf.Sign(m_Angle);
+                        }
+                        break;
+                    case State.Return:
+                        if (getTravel() > deadZone) {
+                            objPos += (m_DefaultObjectPos - objPos).normalized * Time.deltaTime / objectSpeed;
+                            UpdatePosRot(objPos);
+                        } else {
+                            m_Anim.SetBool("running", false);
+                            m_Dir = m_Object.transform.forward;
+                            
+                            // Можно было просто прописать `m_Angle -= Mathf.PI`, 
+                            // но так рассчет будет более правильным
+                            float newAngle = Vector3.Angle(m_Dir, Vector3.forward) * Mathf.Deg2Rad;
+                            m_Angle = (m_Dir.x < 0) ? Mathf.PI + (Mathf.PI - newAngle) : newAngle;
+                            
+                            setState(State.Idle);
+                        }
+                        break;
+                }
+            }
+        }
+
+
+        public State getState() {
+            return m_CurrentState;
+        }
+
+        void setState(State state) {
+            m_CurrentState = state;
+            if (m_CurrentState == State.Idle) {
+                m_Anim.SetBool("running", false);
+            } else {
+                m_Anim.SetBool("running", true);
+            }
+        }
+
+
+        public float getTravel() {
+            if (m_Object != null) {
+                return Vector3.Distance(m_Object.transform.position, m_DefaultObjectPos);
+            } else {
+                return 0f;
+            }
+        }
+
+
+        void UpdatePosRot(Vector3 pos) {
+            m_Object.transform.rotation = Quaternion.Lerp(
+                    m_Object.transform.rotation,
+                    Quaternion.LookRotation(pos - m_Object.transform.position),
+                    lookAtSpeed * Time.deltaTime);
+            m_Object.transform.position = pos;
+        }
+
+
+        public void ChangeState() {
+            if (getState() == State.Idle) {
+                setState(State.Starting);
+            } else {
+                setState(State.Return);
+            }
+        }
+    }
+
 }
