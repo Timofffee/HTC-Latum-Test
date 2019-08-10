@@ -2,19 +2,16 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-public class InGame : MonoBehaviour {
+public class SceneObjects : MonoBehaviour {
     
     public Player player = new Player();
     public InteractiveCamera interactiveCamera = new InteractiveCamera();
 
     public Transform spawnPoint;
 
-    [SerializeField]
-    GameObject btnPlay;
-    [SerializeField]
-    Sprite imgIdle;
-    [SerializeField]
-    Sprite imgRun;
+    public GameObject btnPlay;
+    public Sprite imgIdle;
+    public Sprite imgRun;
 
     AudioSource m_AudioSrc;
     Selectable m_ButtonPlay;
@@ -85,6 +82,13 @@ public class InGame : MonoBehaviour {
         m_AudioSrc.Stop();
     }
 
+    
+    // Неправильно хранить это здесь, но это куда правильней,
+    // чем держать целый скрипт ради одной функции. 
+    public void OpenURL(string url) {
+        Application.OpenURL(url);
+    }
+
 
     [System.Serializable]
     public class Player {
@@ -94,9 +98,13 @@ public class InGame : MonoBehaviour {
 
         public GameObject playingPrefab;
 
+        [Range(0, 0.1f)]
         public float deadZone = 0.05f;
+        [Range(0.3f, 100f)]
         public float radius = 1f;
+        [Range(0, 10f)]
         public float objectSpeed = 2f;
+        [Range(0, 10f)]
         public float lookAtSpeed = 5f;
 
         GameObject m_Object;
@@ -130,12 +138,11 @@ public class InGame : MonoBehaviour {
 
         public void Update() {
             if (m_Object != null) {
-                // Oh yeah! Optimization!
                 Vector3 objPos = m_Object.transform.position;
                 switch (GetState()) {
                     case State.Starting:
                         if (GetTravel() < radius) {
-                            objPos += m_Dir * Time.deltaTime / objectSpeed;
+                            objPos += m_Dir * Time.deltaTime * objectSpeed;
                             UpdatePosRot(objPos);
                         } else {
                             SetState(State.Running);
@@ -146,14 +153,14 @@ public class InGame : MonoBehaviour {
                         objPos += m_DefaultObjectPos;
                         UpdatePosRot(objPos);
 
-                        m_Angle = m_Angle + Time.deltaTime / objectSpeed * 2.0f * radius;
+                        m_Angle = m_Angle + Time.deltaTime * objectSpeed * 2.0f * radius;
                         if (Mathf.Abs(m_Angle) >= 2 * Mathf.PI) {
                             m_Angle = (Mathf.Abs(m_Angle) - 2 * Mathf.PI) * Mathf.Sign(m_Angle);
                         }
                         break;
                     case State.Return:
                         if (GetTravel() > deadZone) {
-                            objPos += (m_DefaultObjectPos - objPos).normalized * Time.deltaTime / objectSpeed;
+                            objPos += (m_DefaultObjectPos - objPos).normalized * Time.deltaTime * objectSpeed;
                             UpdatePosRot(objPos);
                         } else {
                             m_Anim.SetBool("running", false);
@@ -216,18 +223,27 @@ public class InGame : MonoBehaviour {
 
     [System.Serializable]
     public class InteractiveCamera {
-        public float distance = 1f;
+        [Range(-180f, 180f)]
         public float angleHorizontal = 30f;
+        [Range(-180f, 180f)]
         public float angleVertical = 0f;
+        [Range(0, 1000f)]
         public float rotationSpeed = 50f;
+        [Range(0, 100f)]
         public float rotationSpeedSmooth = 1f;
+        [Range(0, 1000f)]
+        public float distance = 1f;
+        [Range(0, 100f)]
         public float distanceSpeed = 1f;
+        [Range(0, 100f)]
         public float distanceSpeedSmooth = 1f;
+        [Range(0, 1000f)]
+        public float distanceMin = 1f;
+        [Range(0, 1000f)]
+        public float distanceMax = 2f;
 
-        [SerializeField]
-        Transform m_Camera;
-        [SerializeField]
-        Transform m_Target;
+        public Transform m_Camera;
+        public Transform m_Target;
 
         bool m_IsActive = true;
         float m_Distance;
@@ -242,15 +258,6 @@ public class InGame : MonoBehaviour {
                 UpdateRot();
                 UpdatePos();
             }
-        }
-
-
-        public void SetTarget(Transform target) {
-            m_Target = target;
-        }
-
-        public Transform GetTarget() {
-            return m_Target;
         }
 
 
@@ -274,6 +281,8 @@ public class InGame : MonoBehaviour {
             } else if (Input.GetKey(KeyCode.W)) {
                 distance -= distanceSpeed * Time.deltaTime;
             }
+
+            distance = Mathf.Clamp(distance, distanceMin, distanceMax);
 
             m_Distance = Mathf.Lerp(m_Distance, distance, distanceSpeedSmooth * Time.deltaTime);
             

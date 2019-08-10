@@ -825,9 +825,9 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 917162364}
-        m_MethodName: SendMessage
-        m_Mode: 5
+      - m_Target: {fileID: 917162369}
+        m_MethodName: SendEmail
+        m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
@@ -1332,16 +1332,18 @@ MonoBehaviour:
       type: 3}
     deadZone: 0.05
     radius: 0.85
-    objectSpeed: 2
+    objectSpeed: 0.5
     lookAtSpeed: 5
   interactiveCamera:
-    distance: 2
-    angleHorizontal: 30
+    angleHorizontal: 60
     angleVertical: 0
     rotationSpeed: 50
     rotationSpeedSmooth: 5
+    distance: 2
     distanceSpeed: 2
     distanceSpeedSmooth: 5
+    distanceMin: 1
+    distanceMax: 2
     m_Camera: {fileID: 963194228}
     m_Target: {fileID: 1970211879}
   spawnPoint: {fileID: 1970211879}
